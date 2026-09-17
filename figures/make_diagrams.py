@@ -1,4 +1,4 @@
-"""Render the concept diagrams used in lesson_01_native_lerobot_dataset.ipynb.
+"""Render the concept diagrams used in the lesson notebooks (01: figures 01-07, 02: figures 08-11).
 
 Run from the workspace root:  conda run -n fo_lerobot python figures/make_diagrams.py
 """
@@ -43,8 +43,8 @@ def box(ax, x, y, w, h, color, text="", fc=None, lw=1.4, fontsize=10, textcolor=
     return p
 
 
-def arrow(ax, x0, y0, x1, y1, color=MUTED, lw=1.6, style="-|>", ms=14, z=3, ls="-"):
-    a = FancyArrowPatch((x0, y0), (x1, y1), arrowstyle=style, mutation_scale=ms, color=color, lw=lw, zorder=z, linestyle=ls)
+def arrow(ax, x0, y0, x1, y1, color=MUTED, lw=1.6, style="-|>", ms=14, z=3, ls="-", conn="arc3,rad=0"):
+    a = FancyArrowPatch((x0, y0), (x1, y1), arrowstyle=style, mutation_scale=ms, color=color, lw=lw, zorder=z, linestyle=ls, connectionstyle=conn)
     ax.add_patch(a)
 
 
@@ -392,6 +392,232 @@ def shape_flow():
     save(fig, "07_shape_flow.png")
 
 
+# ==============================================================================================
+# Lesson 2
+# ==============================================================================================
+FO = "#ff6d04"       # FiftyOne orange
+FO_DARK = "#c2530a"
+FOLDER = "#8a6d3b"
+
+
+def folder(ax, x, y, w, h, title, color=FOLDER, fc="#fbf7ef"):
+    """A folder-shaped box with a tab."""
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.02,rounding_size=0.08", ec=color, fc=fc, lw=1.4, zorder=2))
+    ax.add_patch(Rectangle((x + 0.05, y + h - 0.02), w * 0.42, 0.22, fc=color, ec="none", zorder=2))
+    label(ax, x + 0.05 + w * 0.21, y + h + 0.09, title, size=8.5, color="white", weight="bold", family="DejaVu Sans Mono")
+
+
+def sample_card(ax, x, y, w, h, title="sample", fields=None, ref_lines=None, fontsize=8.6):
+    box(ax, x, y, w, h, FO, fc="#fff7f0", lw=1.6)
+    label(ax, x + w / 2, y + h - 0.22, title, size=10, color=FO_DARK, weight="bold")
+    yy = y + h - 0.55
+    for k, v in (fields or []):
+        label(ax, x + 0.15, yy, k, size=fontsize, ha="left", family="DejaVu Sans Mono", color=INK)
+        label(ax, x + w - 0.15, yy, v, size=fontsize, ha="right", family="DejaVu Sans Mono", color=MUTED)
+        yy -= 0.3
+    if ref_lines:
+        yy -= 0.05
+        ax.plot([x + 0.12, x + w - 0.12], [yy + 0.16, yy + 0.16], color=LINE, lw=1)
+        for line, c in ref_lines:
+            label(ax, x + 0.15, yy, line, size=fontsize, ha="left", family="DejaVu Sans Mono", color=c)
+            yy -= 0.3
+    return yy
+
+
+# ----------------------------------------------------------------------------------------------
+# 8. one FiftyOne sample = one episode, pointing into the LeRobot source
+# ----------------------------------------------------------------------------------------------
+def episode_sample():
+    fig, ax = canvas(13, 6.6)
+    label(ax, 6.5, 6.3, "A FiftyOne sample is one episode: a handful of scalars plus a pointer into the LeRobot source", size=12, weight="bold")
+
+    # left: FiftyOne dataset of 50 samples, one expanded
+    label(ax, 2.35, 5.7, "FiftyOne dataset  \u00b7  50 samples", size=10, color=FO_DARK, weight="bold")
+    cy, ch = 2.0, 3.3
+    for k in range(6, 0, -1):
+        ax.add_patch(Rectangle((0.55 + k * 0.07, cy - k * 0.07), 3.6, ch, fc="#fff7f0", ec=FO, lw=0.8, alpha=0.5, zorder=1))
+    sample_card(ax, 0.55, cy, 3.6, ch, title="sample  (episode 0)",
+                fields=[("episode_index", "0"), ("task", '"Insert the peg\u2026"'), ("length", "500"), ("duration", "10.0"), ("fps", "50.0"), ("robot_type", '"aloha"')],
+                ref_lines=[("media_reference", FO_DARK),
+                           ("  .data   = [0, 0, 0, 500]", IMG),
+                           ("  .videos = {top: [0, 0, 0.0, 10.0]}", ACTION)])
+    label(ax, 2.35, 1.25, "filterable scalars above the line;\nthe pointer below it", size=8.8, color=MUTED)
+
+    # right: LeRobot folder with data table and video
+    fx, fy, fw, fh = 5.2, 0.7, 7.3, 4.75
+    ax.add_patch(FancyBboxPatch((fx, fy), fw, fh, boxstyle="round,pad=0.02,rounding_size=0.08", ec=FOLDER, fc="#fbf7ef", lw=1.4, zorder=2))
+    ax.add_patch(Rectangle((fx + 0.05, fy + fh - 0.02), fw * 0.72, 0.24, fc=FOLDER, ec="none", zorder=2))
+    label(ax, fx + 0.15, fy + fh + 0.1, "~/lerobot-data/aloha_sim_insertion_human/", size=8.5, color="white", weight="bold", family="DejaVu Sans Mono", ha="left")
+    label(ax, fx + fw / 2, fy + fh + 0.42, 'dataset.media_sources[0]["loc"]  \u2192  the LeRobot folder on disk  (stored once per dataset)', size=9, color=FOLDER, family="DejaVu Sans Mono")
+
+    # data table
+    label(ax, 5.55, 4.95, "data/\u2026/file-000.parquet   (25 000 rows)", size=9, ha="left", family="DejaVu Sans Mono", color=INK)
+    tx, ty, tw = 5.55, 1.55, 3.0
+    n = 12
+    rh = 0.26
+    names = ["row 0", "row 1", "\u2026", "row 499", "row 500", "\u2026", "row 999", "\u2026", "\u2026", "\u2026", "\u2026", "row 24999"]
+    for i in range(n):
+        y = ty + (n - 1 - i) * rh
+        in_ep0 = i < 4
+        ax.add_patch(Rectangle((tx, y), tw, rh - 0.04, fc=IMG if in_ep0 else "#eceff1", ec="none", alpha=0.85 if in_ep0 else 1, zorder=2))
+        txt = names[i]
+        label(ax, tx + 0.12, y + rh / 2 - 0.02, txt, size=7.8, ha="left", family=None if txt == "\u2026" else "DejaVu Sans Mono", color="white" if in_ep0 else MUTED)
+    by0, by1 = ty + (n - 4) * rh, ty + n * rh - 0.04
+    ax.plot([tx + tw + 0.1, tx + tw + 0.22, tx + tw + 0.22, tx + tw + 0.1], [by1, by1, by0, by0], color=IMG, lw=1.4)
+    label(ax, tx + tw + 0.32, (by0 + by1) / 2, "rows 0:500\n= .data[2:4]", size=8.5, ha="left", color=IMG)
+
+    # video
+    vx, vy, vw = 9.7, 2.55, 2.55
+    label(ax, vx, 3.55, "videos/observation.images.top/\n\u2026/file-000.mp4", size=8.4, ha="left", family="DejaVu Sans Mono", color=INK)
+    ax.add_patch(Rectangle((vx, vy), vw, 0.5, fc="#eceff1", ec="none", zorder=2))
+    ax.add_patch(Rectangle((vx, vy), vw * 0.1, 0.5, fc=ACTION, ec="none", alpha=0.9, zorder=3))
+    for k in range(1, 10):
+        ax.plot([vx + vw * k / 10] * 2, [vy, vy + 0.5], color="white", lw=1, zorder=4)
+    label(ax, vx, vy - 0.17, "0 s", size=7.5, color=MUTED)
+    label(ax, vx + vw, vy - 0.17, "500 s", size=7.5, color=MUTED)
+    label(ax, vx + vw * 0.1 + 0.1, vy + 0.25, "0.0 \u2013 10.0 s = .videos[top][2:4]", size=8.0, color=ACTION, ha="left")
+    label(ax, vx + vw / 2, vy - 0.6, "50 episodes share one mp4;\nthe pointer is a time window", size=8.3, color=MUTED)
+
+    # arrows from the two pointer lines to the folder pieces
+    arrow(ax, 4.2, 2.6, tx - 0.05, (by0 + by1) / 2, color=IMG, lw=1.6)
+    arrow(ax, 4.2, 2.3, vx - 0.05, vy + 0.25, color=ACTION, lw=1.6)
+    label(ax, 6.5, 0.28, "Nothing frame-level lives in FiftyOne's database. The App, and your code, read frames through the pointer.", size=9.5, color=MUTED)
+    save(fig, "08_episode_sample.png")
+
+
+# ----------------------------------------------------------------------------------------------
+# 9. road 1: following the pointer to a (500, 14) array
+# ----------------------------------------------------------------------------------------------
+def pointer_road():
+    fig, ax = canvas(13, 4.6)
+    label(ax, 6.5, 4.3, "Road 1, read in place: two values from FiftyOne, one slice in LeRobot", size=12, weight="bold")
+
+    # step boxes
+    def step(x, y, w, h, title, code, color, sub=""):
+        box(ax, x, y, w, h, color, fc="white", lw=1.6)
+        label(ax, x + w / 2, y + h - 0.28, title, size=9.5, color=color, weight="bold")
+        label(ax, x + w / 2, y + h / 2 - 0.02, code, size=8.6, family="DejaVu Sans Mono", color=INK)
+        if sub:
+            label(ax, x + w / 2, y + 0.25, sub, size=8.3, color=MUTED)
+
+    step(0.3, 2.35, 3.7, 1.5, "where the files are", 'dataset.media_sources[0]["loc"]', FOLDER, "once per dataset → a folder path")
+    step(0.3, 0.45, 3.7, 1.5, "which rows are this episode", "sample.media_reference.data", IMG, "once per sample → [chunk, file, 0, 500]")
+
+    step(4.75, 1.4, 3.6, 1.5, "open the folder (Lesson 1)", "LeRobotDataset(repo_id, root=root)", INK, "the native torch Dataset, no download")
+    arrow(ax, 4.0, 3.1, 4.75, 2.3, color=FOLDER)
+    step(8.9, 1.4, 3.85, 1.5, "slice the frame table", 'lr.hf_dataset["action"][row_start:row_end]', ACTION, "→ actions of episode 0, shape (500, 14)")
+    arrow(ax, 8.35, 2.15, 8.9, 2.15, color=INK)
+    arrow(ax, 4.0, 0.9, 10.8, 1.38, color=IMG, ls=(0, (4, 3)), conn="arc3,rad=0.25")
+    label(ax, 7.0, 0.62, "row_start, row_end", size=8, color=IMG, family="DejaVu Sans Mono")
+
+    label(ax, 6.5, 0.15, "Same array as Lesson 1 section 5, reached from a FiftyOne sample instead of a hard-coded index. No data copied.", size=9.5, color=MUTED)
+    save(fig, "09_pointer_road.png")
+
+
+# ----------------------------------------------------------------------------------------------
+# 10. three roads from a view back to LeRobot
+# ----------------------------------------------------------------------------------------------
+def three_roads():
+    fig, ax = canvas(13, 7.2)
+    label(ax, 6.5, 6.9, "Three roads from a FiftyOne view back to frames. Pick by asking: who consumes the frames?", size=12, weight="bold")
+
+    # the view
+    box(ax, 0.4, 2.5, 2.6, 2.2, FO, fc="#fff7f0", lw=1.8)
+    label(ax, 1.7, 4.35, "FiftyOne view", size=10.5, color=FO_DARK, weight="bold")
+    label(ax, 1.7, 3.85, "dataset.take(10)\ndataset.match(...)\nsort_by_similarity(...)", size=8.6, family="DejaVu Sans Mono", color=INK)
+    label(ax, 1.7, 2.95, "a query, nothing copied\n→ a set of episode samples", size=8.5, color=MUTED)
+
+    def road(y, num, title, consumer, code, copies, color, use_when):
+        x = 4.1
+        arrow(ax, 3.0, 3.6, x, y + 0.75, color=color, lw=2.0, ms=16)
+        box(ax, x, y, 8.6, 1.55, color, fc="white", lw=1.6)
+        ax.add_patch(Rectangle((x, y), 0.55, 1.55, fc=color, ec="none", zorder=3))
+        label(ax, x + 0.275, y + 0.775, str(num), size=16, color="white", weight="bold")
+        label(ax, x + 0.75, y + 1.25, title, size=10.5, color=color, weight="bold", ha="left")
+        label(ax, x + 0.75, y + 0.9, code, size=8.6, family="DejaVu Sans Mono", color=INK, ha="left")
+        label(ax, x + 0.75, y + 0.55, "consumer:  " + consumer, size=8.8, color=INK, ha="left")
+        label(ax, x + 0.75, y + 0.22, use_when, size=8.3, color=MUTED, ha="left")
+        # copies badge
+        bc = PAD if copies else STATE
+        box(ax, x + 6.95, y + 1.05, 1.5, 0.38, bc, fc=bc, lw=0)
+        label(ax, x + 7.7, y + 1.24, "copies data" if copies else "no copy", size=8.5, color="white", weight="bold")
+
+    road(4.9, 1, "Read in place", "your own code, one sample at a time",
+         'root = media_sources[0]["loc"];  rows = media_reference.data[2:4]',
+         False, IMG, "you hold a sample and need its rows now: a plot, a metric, a policy on one episode")
+    road(2.75, 2, "Torch dataset", "a training or inference loop",
+         'view.to_torch(GetItem)   or   LeRobotDataset(root, episodes=view.values(...))',
+         False, BATCH, "batches from a curated subset; per episode or per frame")
+    road(0.6, 3, "Export", "anything outside this Python process",
+         "view.export(export_dir, dataset_type=fo.types.LeRobotDataset)",
+         True, ACTION, "a new standalone LeRobot v3 dataset: training on another machine, Hub upload, a colleague")
+
+    label(ax, 6.5, 0.2, "Rule of thumb:  in-process → do not copy (1, 2).   Out-of-process → copy (3).", size=10, color=INK)
+    save(fig, "10_three_roads.png")
+
+
+# ----------------------------------------------------------------------------------------------
+# 11. two torch datasets from one view
+# ----------------------------------------------------------------------------------------------
+def torch_two_ways():
+    fig, ax = canvas(14.6, 6.6)
+    cx = 7.3
+    label(ax, cx, 6.3, "Road 2 has two shapes. The question is: what should one item be?", size=12, weight="bold")
+
+    # view at top center
+    box(ax, cx - 1.9, 4.75, 3.8, 1.05, FO, fc="#fff7f0", lw=1.6)
+    label(ax, cx, 5.5, "view = dataset.take(10, seed=51)", size=9, family="DejaVu Sans Mono", color=INK)
+    label(ax, cx, 5.08, "10 episode samples", size=8.8, color=MUTED)
+
+    pw, ph, py = 6.8, 3.3, 1.05
+    ys = py + 1.75
+
+    def pipeline(x, color, stages):
+        """stages: list of (w, fc, ec, line1, line2, c1, c2)"""
+        xx = x + 0.3
+        for i, (w, fc, ec, l1, l2, c1, c2) in enumerate(stages):
+            box(ax, xx, ys - 0.3, w, 0.7, ec, fc=fc, lw=1.2 if fc != ec else 0)
+            label(ax, xx + w / 2, ys + 0.2, l1, size=7.6, color=c1, weight="bold", family="DejaVu Sans Mono")
+            label(ax, xx + w / 2, ys - 0.08, l2, size=7.0, family="DejaVu Sans Mono", color=c2)
+            xx += w
+            if i < len(stages) - 1:
+                arrow(ax, xx + 0.05, ys + 0.05, xx + 0.4, ys + 0.05, color=color, lw=1.3, ms=10)
+                xx += 0.45
+
+    # left: to_torch
+    lx = 0.3
+    arrow(ax, cx - 1.9, 5.2, lx + pw / 2 + 1.2, py + ph + 0.05, color=BATCH, lw=1.8)
+    box(ax, lx, py, pw, ph, BATCH, fc="white", lw=1.6)
+    label(ax, lx + pw / 2, py + ph - 0.3, "6a   view.to_torch(EpisodeGetItem(A))", size=9.6, color=BATCH, weight="bold", family="DejaVu Sans Mono")
+    label(ax, lx + pw / 2, py + ph - 0.65, "one item = one episode", size=9.5, color=INK, weight="bold")
+    pipeline(lx, BATCH, [
+        (1.95, "#fff7f0", FO, "required_keys", "media_reference, task", FO_DARK, INK),
+        (2.05, "white", INK, "GetItem.__call__", "A[row0:row1] -> 25 steps", INK, INK),
+        (1.75, BATCH, BATCH, "traj (25, 14)", "+ episode_index, task", "white", "white"),
+    ])
+    label(ax, lx + pw / 2, py + 0.95, "FiftyOneTorchDataset, len = 10", size=8.6, color=MUTED, family="DejaVu Sans Mono")
+    label(ax, lx + pw / 2, py + 0.62, "DataLoader(batch_size=4, worker_init_fn=FiftyOneTorchDataset.worker_init)", size=7.4, color=MUTED, family="DejaVu Sans Mono")
+    label(ax, lx + pw / 2, py + 0.28, "batch:  traj (4, 25, 14)         for episode-level models", size=8.6, color=INK, family="DejaVu Sans Mono")
+
+    # right: LeRobotDataset(episodes=)
+    rx = 14.6 - 0.3 - pw
+    arrow(ax, cx + 1.9, 5.2, rx + pw / 2 - 1.2, py + ph + 0.05, color=ACTION, lw=1.8)
+    box(ax, rx, py, pw, ph, ACTION, fc="white", lw=1.6)
+    label(ax, rx + pw / 2, py + ph - 0.3, '6b   LeRobotDataset(root, episodes=view.values("episode_index"))', size=8.4, color=ACTION, weight="bold", family="DejaVu Sans Mono")
+    label(ax, rx + pw / 2, py + ph - 0.65, "one item = one frame", size=9.5, color=INK, weight="bold")
+    pipeline(rx, ACTION, [
+        (2.2, "#fff7f0", FO, 'values("episode_index")', "[4, 8, 11, 18, 20, ...]", FO_DARK, INK),
+        (1.8, "white", INK, "episodes=[...]", "+ delta_timestamps", INK, INK),
+        (1.75, ACTION, ACTION, "Lesson 1 dict", "image, state, action", "white", "white"),
+    ])
+    label(ax, rx + pw / 2, py + 0.95, "LeRobotDataset, len = 5 000 frames", size=8.6, color=MUTED, family="DejaVu Sans Mono")
+    label(ax, rx + pw / 2, py + 0.62, "DataLoader(batch_size=8)", size=7.4, color=MUTED, family="DejaVu Sans Mono")
+    label(ax, rx + pw / 2, py + 0.28, "batch:  action (8, 10, 14) ...    for policies", size=8.6, color=INK, family="DejaVu Sans Mono")
+
+    label(ax, cx, 0.5, "Both read the source folder FiftyOne pointed at. Nothing is exported or copied; FiftyOne's only job here was choosing the episodes.", size=9.5, color=MUTED)
+    save(fig, "11_torch_two_ways.png")
+
+
 if __name__ == "__main__":
     dataset_table()
     one_frame()
@@ -399,6 +625,10 @@ if __name__ == "__main__":
     padding()
     batch()
     shape_flow()
+    episode_sample()
+    pointer_road()
+    three_roads()
+    torch_two_ways()
 
     # real data for the episode matrix
     os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
