@@ -618,6 +618,251 @@ def torch_two_ways():
     save(fig, "11_torch_two_ways.png")
 
 
+# ==============================================================================================
+# Lesson 3  (real data: A = actions, S = states, EP = episode index, all 25 000 rows)
+# ==============================================================================================
+ARM = [0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12]
+L_GRIP, R_GRIP = 6, 13
+
+
+def grasp_time(g, fps):
+    mid = (g.max() + g.min()) / 2
+    opened = np.where(g > mid)[0]
+    if len(opened) == 0:
+        return len(g) / fps
+    closed = np.where(g[opened[0]:] < mid)[0]
+    return (opened[0] + closed[0]) / fps if len(closed) else len(g) / fps
+
+
+# ----------------------------------------------------------------------------------------------
+# 12. from curves to six numbers on the sample
+# ----------------------------------------------------------------------------------------------
+def kinematics(A, S, EP, fps, ep=0):
+    a, s = A[EP == ep], S[EP == ep]
+    t = np.arange(len(a)) / fps
+    step = np.linalg.norm(np.diff(a[:, ARM], axis=0), axis=1)
+    tl, tr = grasp_time(a[:, L_GRIP], fps), grasp_time(a[:, R_GRIP], fps)
+    feats = {
+        "joint_travel": step.sum(), "peak_speed": step.max() * fps, "idle_frac": (step < 1e-3).mean(),
+        "track_err": np.abs(a[:, ARM] - s[:, ARM]).mean(), "grasp_t_left": tl, "grasp_t_right": tr,
+    }
+
+    fig = plt.figure(figsize=(13, 6.6))
+    gs = fig.add_gridspec(3, 2, width_ratios=[2.2, 1.0], hspace=0.55, wspace=0.25, left=0.06, right=0.98, top=0.9, bottom=0.08)
+    fig.suptitle(f"Episode {ep}: three views of the same 14 curves, reduced to six numbers on the FiftyOne sample", fontsize=12, color=INK, weight="bold", x=0.5, y=0.97)
+
+    def style(ax, title):
+        ax.set_title(title, fontsize=9.8, loc="left", color=INK)
+        for sp in ["top", "right"]:
+            ax.spines[sp].set_visible(False)
+        ax.spines["left"].set_color(LINE); ax.spines["bottom"].set_color(LINE)
+        ax.tick_params(labelsize=8, colors=MUTED)
+        ax.grid(alpha=0.2)
+
+    # (a) speed per step -> joint_travel, peak_speed, idle_frac
+    ax = fig.add_subplot(gs[0, 0])
+    ax.fill_between(t[1:], step * fps, color=STATE, alpha=0.25)
+    ax.plot(t[1:], step * fps, color=STATE, lw=1.2)
+    k = step.argmax()
+    ax.plot(t[1 + k], step[k] * fps, "o", color=PAD, ms=5)
+    ax.annotate(f"peak_speed = {feats['peak_speed']:.2f}", (t[1 + k], step[k] * fps), xytext=(8, -2), textcoords="offset points", fontsize=8.5, color=PAD)
+    ax.axhline(1e-3 * fps, color=MUTED, lw=0.8, ls="--")
+    ax.text(t[-1], 1e-3 * fps, "  idle threshold", fontsize=7.5, color=MUTED, va="bottom", ha="right")
+    style(ax, f"joint speed per step, 12 arm joints    →  joint_travel = area = {feats['joint_travel']:.2f},   idle_frac = share below threshold = {feats['idle_frac']:.3f}")
+    ax.set_ylabel("|Δaction| · fps", fontsize=8, color=MUTED)
+
+    # (b) gripper curves -> grasp_t_left / right
+    ax = fig.add_subplot(gs[1, 0])
+    for g, tg, c, name in [(L_GRIP, tl, LEFT, "left"), (R_GRIP, tr, RIGHT, "right")]:
+        ax.plot(t, a[:, g], color=c, lw=1.5, label=f"{name} gripper action")
+        mid = (a[:, g].max() + a[:, g].min()) / 2
+        ax.axhline(mid, color=c, lw=0.7, ls=":", alpha=0.7)
+        ax.axvline(tg, color=c, lw=1.2, ls="--")
+        ax.annotate(f"grasp_t_{name} = {tg:.2f} s", (tg, mid), xytext=(6, 14 if name == "left" else 22), textcoords="offset points", fontsize=8.5, color=c)
+    style(ax, "gripper commands (high = open, low = closed)    →  first close after the first open")
+    ax.legend(frameon=False, fontsize=8, loc="upper right")
+
+    # (c) action vs state on one joint -> track_err
+    ax = fig.add_subplot(gs[2, 0])
+    j = 2
+    ax.plot(t, a[:, j], color=ACTION, lw=1.4, label="action (commanded)")
+    ax.plot(t, s[:, j], color=STATE, lw=1.4, label="state (measured)")
+    ax.fill_between(t, a[:, j], s[:, j], color=PAD, alpha=0.3, label="|action − state|")
+    style(ax, f"joint {j}: commanded vs measured    →  track_err = mean gap over 12 arm joints = {feats['track_err']:.4f}")
+    ax.set_xlabel("seconds", fontsize=8.5, color=MUTED)
+    ax.legend(frameon=False, fontsize=8, loc="upper right", ncol=3)
+
+    # right: the sample card with the six fields
+    ax = fig.add_subplot(gs[:, 1]); ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+    ax.add_patch(FancyBboxPatch((0.08, 0.06), 0.84, 0.88, boxstyle="round,pad=0.02,rounding_size=0.03", ec=FO, fc="#fff7f0", lw=1.6, transform=ax.transAxes))
+    ax.text(0.5, 0.88, f"sample  (episode {ep})", ha="center", fontsize=10.5, color=FO_DARK, weight="bold", transform=ax.transAxes)
+    y = 0.79
+    for k_, v in [("episode_index", str(ep)), ("task", '"Insert the peg…"'), ("duration", "10.0")]:
+        ax.text(0.14, y, k_, fontsize=8.5, family="DejaVu Sans Mono", color=MUTED, transform=ax.transAxes)
+        ax.text(0.86, y, v, fontsize=8.5, family="DejaVu Sans Mono", color=MUTED, ha="right", transform=ax.transAxes)
+        y -= 0.06
+    ax.plot([0.14, 0.86], [y + 0.02, y + 0.02], color=LINE, lw=1, transform=ax.transAxes)
+    ax.text(0.14, y - 0.035, "added by set_values", fontsize=8, color=FO_DARK, transform=ax.transAxes)
+    y -= 0.1
+    colors = {"joint_travel": STATE, "peak_speed": PAD, "idle_frac": STATE, "track_err": PAD, "grasp_t_left": LEFT, "grasp_t_right": RIGHT}
+    for k_, v in feats.items():
+        ax.text(0.14, y, k_, fontsize=9, family="DejaVu Sans Mono", color=colors[k_], weight="bold", transform=ax.transAxes)
+        ax.text(0.86, y, f"{v:.3f}", fontsize=9, family="DejaVu Sans Mono", color=INK, ha="right", transform=ax.transAxes)
+        y -= 0.068
+    ax.text(0.5, 0.1, "one float per episode → sidebar sliders,\nsort_by, match, histograms", fontsize=8.3, color=MUTED, ha="center", transform=ax.transAxes)
+    save(fig, "12_kinematics.png")
+
+
+# ----------------------------------------------------------------------------------------------
+# 13. temporal tags on the episode timeline
+# ----------------------------------------------------------------------------------------------
+def temporal_tags(A, EP, fps, ep=0):
+    a = A[EP == ep]
+    t = np.arange(len(a)) / fps
+    tl, tr = grasp_time(a[:, L_GRIP], fps), grasp_time(a[:, R_GRIP], fps)
+    NS = 1_000_000_000
+    half = 0.25
+
+    fig = plt.figure(figsize=(13, 5.2))
+    gs = fig.add_gridspec(2, 1, height_ratios=[1.0, 2.2], hspace=0.08, left=0.06, right=0.98, top=0.86, bottom=0.12)
+    fig.suptitle("A temporal tag is a [start, end) interval on one sample's timeline, in nanoseconds from the start of the episode",
+                 fontsize=12, color=INK, weight="bold", y=0.97)
+
+    # top: the App-style timeline with two tag bars
+    ax0 = fig.add_subplot(gs[0]); ax0.set_xlim(0, 10); ax0.set_ylim(0, 1); ax0.axis("off")
+    ax0.add_patch(Rectangle((0, 0.42), 10, 0.16, fc="#eceff1", ec="none"))
+    for k in range(11):
+        ax0.plot([k, k], [0.42, 0.58], color="white", lw=1.2)
+        ax0.text(k, 0.3, f"{k} s", ha="center", fontsize=7.5, color=MUTED)
+    for tg, c, name in [(tl, LEFT, "left grasp"), (tr, RIGHT, "right grasp")]:
+        ax0.add_patch(Rectangle((tg - half, 0.42), 2 * half, 0.16, fc=c, ec="none", alpha=0.9))
+        ax0.text(tg, 0.72, f'"{name}"', ha="center", fontsize=9, color=c, weight="bold")
+        ax0.text(tg, 0.05, f"start = {int((tg - half) * NS):,} ns\nend   = {int((tg + half) * NS):,} ns", ha="center", fontsize=7.2, color=c, family="DejaVu Sans Mono")
+    ax0.text(0, 0.88, "the App timeline for this episode", fontsize=9, color=MUTED)
+
+    # bottom: the gripper curves the windows were derived from
+    ax1 = fig.add_subplot(gs[1])
+    for g, tg, c, name in [(L_GRIP, tl, LEFT, "left"), (R_GRIP, tr, RIGHT, "right")]:
+        ax1.plot(t, a[:, g], color=c, lw=1.6, label=f"{name} gripper action")
+        ax1.axvspan(tg - half, tg + half, color=c, alpha=0.18)
+        ax1.axvline(tg, color=c, lw=1.0, ls="--")
+    ax1.set_xlim(0, 10)
+    ax1.set_xlabel("seconds", fontsize=9, color=MUTED)
+    ax1.set_ylabel("gripper command", fontsize=9, color=MUTED)
+    for sp in ["top", "right"]:
+        ax1.spines[sp].set_visible(False)
+    ax1.spines["left"].set_color(LINE); ax1.spines["bottom"].set_color(LINE)
+    ax1.tick_params(labelsize=8, colors=MUTED); ax1.grid(alpha=0.2)
+    ax1.legend(frameon=False, fontsize=8.5, loc="upper right")
+    ax1.text(0.02, 0.06, 'dataset.temporal_tags.add(fota.TemporalTag(sample.id, start=…, end=…, tag="left grasp"))\n'
+                         'dataset.match_temporal_tags(tags="right grasp", start=5 * NS)   →   episodes whose right grasp came after 5 s',
+             transform=ax1.transAxes, fontsize=8.2, family="DejaVu Sans Mono", color=INK,
+             bbox=dict(boxstyle="round,pad=0.4", fc="#fafafa", ec=LINE))
+    save(fig, "13_temporal_tags.png")
+
+
+# ----------------------------------------------------------------------------------------------
+# 14. motion embedding -> Brain
+# ----------------------------------------------------------------------------------------------
+def motion_embedding(A, EP, n_steps=25):
+    eps = sorted(np.unique(EP))
+    emb = np.stack([A[EP == e][np.linspace(0, (EP == e).sum() - 1, n_steps).astype(int)].ravel() for e in eps])
+    # PCA by SVD, for the real map
+    X = emb - emb.mean(axis=0)
+    U, Sv, Vt = np.linalg.svd(X, full_matrices=False)
+    pts = U[:, :2] * Sv[:2]
+    dist = np.linalg.norm(pts - pts.mean(axis=0), axis=1)
+    outliers = set(np.argsort(dist)[-5:])
+    a0 = A[EP == 0]
+    idx = np.linspace(0, len(a0) - 1, n_steps).astype(int)
+
+    fig = plt.figure(figsize=(13, 6.2))
+    gs = fig.add_gridspec(2, 3, width_ratios=[1.0, 1.0, 1.35], height_ratios=[1, 1], wspace=0.35, hspace=0.45, left=0.05, right=0.98, top=0.86, bottom=0.08)
+    fig.suptitle("The motion is the embedding: (500, 14) → 25 evenly spaced rows → one 350-dim vector per episode → Brain", fontsize=12, color=INK, weight="bold", y=0.96)
+
+    def strip(ax):
+        for sp in ax.spines.values():
+            sp.set_visible(False)
+        ax.tick_params(labelsize=7.5, colors=MUTED)
+
+    # (1) full matrix
+    ax = fig.add_subplot(gs[0, 0])
+    ax.imshow(a0, aspect="auto", cmap="RdBu_r", vmin=-1.2, vmax=1.2)
+    for i in idx:
+        ax.axhline(i, color="black", lw=0.5, alpha=0.6)
+    ax.set_title("episode 0 actions (500, 14)\nblack lines = the 25 rows kept", fontsize=9, loc="left", color=INK)
+    ax.set_xticks([]); strip(ax); ax.set_ylabel("time", fontsize=8, color=MUTED)
+
+    # (2) resampled
+    ax = fig.add_subplot(gs[1, 0])
+    ax.imshow(a0[idx], aspect="auto", cmap="RdBu_r", vmin=-1.2, vmax=1.2)
+    ax.set_title("resampled (25, 14)", fontsize=9, loc="left", color=INK)
+    ax.set_xticks(range(0, 14, 2)); ax.set_yticks([0, 12, 24]); strip(ax)
+
+    # (3) flattened vector, all 50 stacked
+    ax = fig.add_subplot(gs[:, 1])
+    ax.imshow(emb, aspect="auto", cmap="RdBu_r", vmin=-1.2, vmax=1.2, interpolation="nearest")
+    ax.set_title("ravel → embeddings (50, 350)\none row per episode", fontsize=9, loc="left", color=INK)
+    ax.set_xlabel("350 = 25 steps × 14 joints", fontsize=8, color=MUTED); ax.set_ylabel("episode", fontsize=8, color=MUTED)
+    ax.set_yticks([0, 10, 20, 30, 40, 49]); strip(ax)
+    ax.axhline(0, color=INK, lw=1.5)
+
+    # (4) similarity: neighbours of episode 0
+    centred = emb - emb.mean(axis=0)                          # FiftyOne's sklearn backend: mean-centre, then cosine
+    unit = centred / np.linalg.norm(centred, axis=1, keepdims=True)
+    d = 1 - unit @ unit[0]
+    nn = np.argsort(d)[:6]
+    ax = fig.add_subplot(gs[0, 2])
+    ax.barh(range(6), d[nn][::-1], color=[BATCH] + [LINE] * 5 if False else [BATCH if e == 0 else MUTED for e in nn[::-1]])
+    ax.set_yticks(range(6)); ax.set_yticklabels([f"episode {e}" for e in nn[::-1]], fontsize=8)
+    ax.set_title("compute_similarity  →  sort_by_similarity(episode 0)\ndistance in embedding space", fontsize=9, loc="left", color=INK)
+    ax.set_xlabel("cosine distance (mean-centred, as FiftyOne computes it)", fontsize=8, color=MUTED)
+    for sp in ["top", "right"]:
+        ax.spines[sp].set_visible(False)
+    ax.tick_params(labelsize=7.5, colors=MUTED)
+
+    # (5) PCA map
+    ax = fig.add_subplot(gs[1, 2])
+    cols = [PAD if i in outliers else BATCH for i in range(len(eps))]
+    ax.scatter(pts[:, 0], pts[:, 1], c=cols, s=38, alpha=0.9)
+    for i in outliers:
+        ax.annotate(str(eps[i]), pts[i], xytext=(4, 3), textcoords="offset points", fontsize=7.5, color=PAD)
+    ax.scatter(*pts.mean(axis=0), marker="+", s=120, color=INK)
+    ax.set_title('compute_visualization(method="pca")  →  2-D map\nred = 5 farthest from the centroid (+) → tag "traj_outlier"', fontsize=9, loc="left", color=INK)
+    for sp in ["top", "right"]:
+        ax.spines[sp].set_visible(False)
+    ax.tick_params(labelsize=7.5, colors=MUTED); ax.grid(alpha=0.2)
+    save(fig, "14_motion_embedding.png")
+
+
+# ----------------------------------------------------------------------------------------------
+# 15. the curation loop
+# ----------------------------------------------------------------------------------------------
+def curation_loop():
+    fig, ax = canvas(14.6, 5.6)
+    label(ax, 7.3, 5.3, "The loop this lesson runs four times: compute per episode \u2192 store on the sample \u2192 query \u2192 look \u2192 hand off", size=12, weight="bold")
+    stages = [
+        ("compute", "NumPy over A, S, EP:\nsix scalars,\ngrasp windows,\n350-dim motion vector", INK, "white"),
+        ("store on samples", "set_values(field, vals)\ntemporal_tags.add(...)\ncompute_similarity(...)\ncompute_visualization(...)\ntag_samples(...)", FO, "#fff7f0"),
+        ("query", "sort_by / match / limit\nmatch_temporal_tags(...)\nsort_by_similarity(...)\nsave_view(...)", FO, "#fff7f0"),
+        ("look", "session.view = ...\nsidebar sliders\ntimeline markers\nEmbeddings panel", FO, "#fff7f0"),
+        ("hand off", "view.export(\n  fo.types.LeRobotDataset)\nor LeRobotDataset(\n  episodes=view.values(...))", ACTION, "white"),
+    ]
+    w, h, gap, y = 2.55, 2.4, 0.3, 1.7
+    x = 0.3
+    for i, (title, body, color, fc) in enumerate(stages):
+        box(ax, x, y, w, h, color, fc=fc, lw=1.6)
+        label(ax, x + w / 2, y + h - 0.3, title, size=10.5, color=color, weight="bold")
+        label(ax, x + w / 2, y + h / 2 - 0.2, body, size=7.7, family="DejaVu Sans Mono", color=INK)
+        if i < len(stages) - 1:
+            arrow(ax, x + w + 0.03, y + h / 2, x + w + gap - 0.03, y + h / 2, color=MUTED, lw=1.8, ms=14)
+        x += w + gap
+    arrow(ax, 0.3 + 3 * (w + gap) + w / 2, y - 0.05, 0.3 + w / 2, y - 0.05, color=MUTED, lw=1.2, ms=12, conn="arc3,rad=-0.25", ls=(0, (4, 3)))
+    label(ax, 7.3, 0.42, "what you see in the App suggests the next thing to compute", size=8.8, color=MUTED)
+    label(ax, 7.3, 0.05, "Everything in the orange boxes is stored on the dataset and survives the kernel: fields, tags, brain runs, saved views.", size=9.3, color=FO_DARK)
+    save(fig, "15_curation_loop.png")
+
+
 if __name__ == "__main__":
     dataset_table()
     one_frame()
@@ -629,12 +874,17 @@ if __name__ == "__main__":
     pointer_road()
     three_roads()
     torch_two_ways()
+    curation_loop()
 
-    # real data for the episode matrix
+    # real data for the data-driven figures
     os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
     import logging
     logging.getLogger("lerobot").setLevel(logging.ERROR)
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
-    ds = LeRobotDataset("lerobot/aloha_sim_insertion_human", episodes=[0])
+    ds = LeRobotDataset("lerobot/aloha_sim_insertion_human")
     tbl = ds.hf_dataset.with_format("numpy")
-    episode_matrix(np.asarray(tbl["action"]), ds.fps)
+    A, S, EP = (np.asarray(tbl[k]) for k in ["action", "observation.state", "episode_index"])
+    episode_matrix(A[EP == 0], ds.fps)
+    kinematics(A, S, EP, ds.fps)
+    temporal_tags(A, EP, ds.fps)
+    motion_embedding(A, EP)
